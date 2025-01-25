@@ -1,5 +1,13 @@
 # 🧞‍♂️ Welcome to CRM Genie: Where Data Meets Magic!
 
+<div align="center">
+
+### 🛠 Main Packages That Power the Magic
+
+![Python](https://img.shields.io/badge/Python-3.10.10-blue?logo=python&logoColor=white) ![Flask](https://img.shields.io/badge/Flask-3.1.0-green?logo=flask&logoColor=white) &nbsp; ![Ollama](https://img.shields.io/badge/Ollama-CodeLLama-orange?logo=ai&logoColor=white) &nbsp; ![SQLite](https://img.shields.io/badge/SQLite-3-lightgrey?logo=sqlite&logoColor=white) &nbsp; ![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-3.3-blue?logo=tailwindcss&logoColor=white)
+
+</div>
+
 Ever wished you could ask your database questions like you’re chatting with a friend? 
 Meet **CRM Genie**, your magical bridge between natural language and SQL queries. With a sprinkle of AI and a dash of user-friendliness, CRM Genie transforms the way you interact with your customer data. Whether you’re tech-savvy or not, this tool ensures you’re just a conversation away from unlocking your database’s potential.
 
