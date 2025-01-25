@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, jsonify
 import requests
 import sqlite3
+import re
+import json
 
 app = Flask(__name__)
 
@@ -13,67 +15,44 @@ def generate_response():
     # Get user input from the request
     user_input = request.json.get('prompt', '')
 
-    # Define the columns available in the database with user-friendly names
+    # Define the columns available in the database
     db_columns = [
-        "Customer name", "Customer Industry", "Customer Region", "Customer employee size", 
-        "About the customer (overview)", "TAM name", "Partner info", "Referenceable or not", 
-        "Department implementing/owning abcompany", "Implementation use case", 
-        "Competitor previously used", "Competitor currently using", "Other tools used", 
-        "Use cases solved with abcompany", "Number of processes, apps built, boards, integrations", 
-        "What are the integrations with abcompany", "Case study if available", "Industry Overview", 
-        "Industry-specific use cases abcompany can solve", "ROI calculations for each"
+        "customer_name", "customer_industry", "customer_region", 
+        "customer_employee_size", "about_customer_overview", "tam_name", 
+        "partner_info", "referenceable_or_not", "department_owning_abcompany", 
+        "implementation_use_case", "competitor_previously_used", 
+        "competitor_currently_using", "other_tools_used", 
+        "use_cases_solved_with_abcompany", 
+        "number_of_processes_apps_built_boards_integrations", 
+        "integrations_with_abcompany", "case_study_if_available", 
+        "industry_overview", "industry_specific_use_cases_abcompany_can_solve", 
+        "roi_calculations_for_each"
     ]
-    
-    # Mapping the user-friendly column names to the actual database column names
-    column_mapping = {
-        "Customer name": "customer_name",
-        "Customer Industry": "customer_industry",
-        "Customer Region": "customer_region",
-        "Customer employee size": "customer_employee_size",
-        "About the customer (overview)": "about_customer_overview",
-        "TAM name": "tam_name",
-        "Partner info": "partner_info",
-        "Referenceable or not": "referenceable_or_not",
-        "Department implementing/owning abcompany": "department_owning_abcompany",
-        "Implementation use case": "implementation_use_case",
-        "Competitor previously used": "competitor_previously_used",
-        "Competitor currently using": "competitor_currently_using",
-        "Other tools used": "other_tools_used",
-        "Use cases solved with abcompany": "use_cases_solved_with_abcompany",
-        "Number of processes, apps built, boards, integrations": "number_of_processes_apps_built_boards_integrations",
-        "What are the integrations with abcompany": "integrations_with_abcompany",
-        "Case study if available": "case_study_if_available",
-        "Industry Overview": "industry_overview",
-        "Industry-specific use cases abcompany can solve": "industry_specific_use_cases_abcompany_can_solve",
-        "ROI calculations for each": "roi_calculations_for_each"
-    }
 
-    # Create a prompt that includes both the user input and the available columns
+    # Prompt for CodeLLama to generate SQL query
     prompt = f"""
-    You are a SQL query generator. The task is to generate a SQL query that reads data from the database 
-    without making any modifications (no INSERT, UPDATE, or DELETE operations). 
+    Generate a valid SQL SELECT query for the `customerinfo` table based on the user input. 
+    Available columns: {', '.join(db_columns)}
 
-    The available columns in the database are:
-    {', '.join(db_columns)}
-
-    The table name is `customerinfo`.
-
-    Based on the following user input, generate a **valid SQL query only** that reads data from the `customerinfo` table, ensuring that no records are modified. 
-
-    Do **not** include any additional explanations or context, only provide the SQL query.
-
-    User input: "{user_input}"
+    Rules:
+    1. Use only SELECT operations
+    2. Return query only
+    3. Ensure query matches user intent: {user_input}
+    4. Format response as valid JSON with 'SQL QUERY' key
+    
+    Example output:
+    {{"SQL QUERY": "SELECT * FROM customerinfo WHERE customer_name LIKE '%example%'"}}
     """
 
     try:
-        # Ollama API endpoint for local model interaction
+        # Ollama API endpoint
         ollama_url = 'http://localhost:11434/api/generate'
         
         # Payload for Ollama API
         payload = {
             "model": "codellama:latest",
             "prompt": prompt,
-            "stream": False  # Set to False to get full response at once
+            "stream": False
         }
         
         # Send request to Ollama
@@ -83,64 +62,81 @@ def generate_response():
         if response.status_code == 200:
             # Parse the response
             result = response.json()
-            sql_query = result.get('response', '')
+            # print(result)
+            generated_text = result.get('response', '').strip()
             
-            # Print the generated SQL query for debugging purposes
-            print("Generated SQL Query:", sql_query)
-            
-            # Now, map user-friendly column names to actual column names
-            for user_friendly, db_column in column_mapping.items():
-                sql_query = sql_query.replace(user_friendly, f'"{db_column}"')
+            # Extract JSON from the response
+            try:
+                # Use regex to find JSON-like content
+                json_match = re.search(r'\{.*?\}', generated_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    parsed_json = json.loads(json_str)
+                    sql_query = parsed_json.get('SQL QUERY', '')
+                else:
+                    # Fallback: Try to extract query directly
+                    sql_query = re.search(r'SELECT.*', generated_text, re.IGNORECASE | re.DOTALL)
+                    sql_query = sql_query.group(0) if sql_query else ''
+                    print(sql_query)
+            except (json.JSONDecodeError, AttributeError):
+                # Last resort: try to extract query manually
+                sql_query = re.search(r'SELECT.*', generated_text, re.IGNORECASE | re.DOTALL)
+                sql_query = sql_query.group(0) if sql_query else ''
 
-            # Print the modified SQL query for debugging purposes
-            print("Modified SQL Query:", sql_query)
-            
-            # Check if a query is returned
-            if sql_query:
+            # Validate and clean the SQL query
+            if sql_query and 'SELECT' in sql_query.upper():
+                # Append semicolon if not present
+                if not sql_query.rstrip().endswith(';'):
+                    sql_query = sql_query.rstrip() + ';'
+                
                 # Connect to the SQLite database
                 connection = sqlite3.connect("F:/IBM/customerdata.db")
                 cursor = connection.cursor()
                 
-                # Execute the generated SQL query
-                cursor.execute(sql_query)
-                
-                # Fetch all rows from the result
-                rows = cursor.fetchall()
-                
-                # Close the connection
-                connection.close()
-                
-                # If data is returned, send it to the user
-                if rows:
+                try:
+                    # Execute the generated SQL query
+                    cursor.execute(sql_query)
+                    
+                    # Fetch all rows from the result
+                    rows = cursor.fetchall()
+                    
+                    # Get column names
+                    column_names = [description[0] for description in cursor.description]
+                    
+                    # Close the connection
+                    connection.close()
+                    
+                    # If data is returned, send it to the user
                     return jsonify({
                         "success": True,
-                        "response": rows
+                        "query": sql_query,
+                        "columns": column_names,
+                        "data": rows
                     })
-                else:
+                
+                except sqlite3.Error as e:
                     return jsonify({
                         "success": False,
-                        "error": "No data found for the query."
+                        "error": f"SQLite error: {str(e)}",
+                        "query": sql_query
                     })
+            
             else:
                 return jsonify({
                     "success": False,
-                    "error": "No SQL query generated by Ollama."
+                    "error": "No valid SQL query generated."
                 })
+        
         else:
             return jsonify({
                 "success": False,
                 "error": f"Ollama API returned status code {response.status_code}"
             })
     
-    except requests.RequestException as e:
+    except Exception as e:
         return jsonify({
             "success": False,
             "error": str(e)
-        })
-    except sqlite3.Error as e:
-        return jsonify({
-            "success": False,
-            "error": f"SQLite error: {str(e)}"
         })
 
 if __name__ == '__main__':
