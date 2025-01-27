@@ -1,4 +1,4 @@
-# 🧞‍♂️ Welcome to CRM Genie: Where Data Meets Magic!
+# 🧞‍♂️ CRM Genie: Where Data Meets Magic!
 
 <div align="center">
 
